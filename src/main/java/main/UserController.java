@@ -189,10 +189,12 @@ public class UserController {
 
         if (obj.has("login")) {
             if (temp.getLogin().equals(obj.getString("login")) && temp.getToken().equals(token)) {
-                res.put("type", "login");
+                res.put("type", getStatus(temp.getLogin()));
                 res.put("login", temp.getLogin());
                 res.put("datetime", time);
                 log.add(res.toString());
+                getLog();
+
 
             } else {
                 res.put("error", "Wrong login or token");
@@ -204,6 +206,22 @@ public class UserController {
 
     }
 
+    private void getLog(){
+
+        for (String log: log){
+            System.out.println(log);
+        }
+    }
+
+    private String getStatus(String login){
+     if(login!=null) {
+         if (getUser(login).getToken() != null) {
+             return "login";
+         }
+         return "logout";
+     } else
+         return null;
+    }
 
     private boolean findLogin(String login) {
         for (User user : list) {
