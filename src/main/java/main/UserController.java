@@ -17,6 +17,7 @@ public class UserController {
 
     List<User> list = new ArrayList<>();
     List<String> log = new ArrayList<>();
+    List<String> messages = new ArrayList<>();
 
     public UserController() {
         list.add(new User("Roman", "Simko", "roman", "heslo"));
@@ -159,6 +160,8 @@ public class UserController {
             if (temp.getLogin().equals(obj.getString("login")) && BCrypt.checkpw(obj.getString("oldpassword"), temp.getPassword())
                     && temp.getToken().equals(token)) {
                 temp.setPassword(obj.getString("newpassword"));
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
             } else {
                 res.put("error", "Wrong password or token");
                 return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
@@ -177,9 +180,6 @@ public class UserController {
         JSONObject res = new JSONObject();
         User temp = getUser(obj.getString("login"));
 
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("ddMMyy HH:mm:ss");
-        LocalDateTime localTime = LocalDateTime.now();
-        String time = dtf.format(localTime);
 
         if (temp == null) {
             res.put("error", "Incorrect login");
@@ -191,9 +191,10 @@ public class UserController {
             if (temp.getLogin().equals(obj.getString("login")) && temp.getToken().equals(token)) {
                 res.put("type", getStatus(temp.getLogin()));
                 res.put("login", temp.getLogin());
-                res.put("datetime", time);
+                res.put("datetime", getTime());
                 log.add(res.toString());
                 getLog();
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
 
             } else {
@@ -206,21 +207,92 @@ public class UserController {
 
     }
 
-    private void getLog(){
 
-        for (String log: log){
+    @RequestMapping(method = RequestMethod.POST, value = "/message/new")
+    public ResponseEntity<String> sendMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
+        JSONObject obj = new JSONObject(data);
+        JSONObject res = new JSONObject();
+        User temp = getUser(obj.getString("from"));
+
+        if (temp == null) {
+            res.put("error", "Wrong user or token is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+
+        if (obj.has("from") && obj.has("to") && obj.has("message")) {
+
+            if (temp.getToken().equals(token) && findLogin(obj.getString("to")) && findLogin(obj.getString("from"))) {
+                res.put("from", obj.getString("from"));
+                res.put("to", obj.getString("to"));
+                res.put("message", obj.getString("message"));
+                res.put("time", getTime());
+                messages.add(res.toString());
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+
+            } else {
+                res.put("error", "Wrong token or user");
+                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            }
+
+        } else
+            res.put("error", "Wrong input");
+        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+    }
+
+
+    @RequestMapping(value = "/message")
+    public ResponseEntity<String> getMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
+        JSONObject obj = new JSONObject(data);
+        JSONObject res = new JSONObject();
+        User temp = getUser(obj.getString("login"));
+
+        if (temp == null) {
+            res.put("error", "Wrong user or token is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+
+        if (obj.has("login")) {
+            if (temp.getToken().equals(token) && findLogin(obj.getString("login"))) {
+                res.put("messages", this.messages);
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+            } else {
+                res.put("error", "Wrong token or login");
+                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            }
+
+
+        } else
+            res.put("error", "Wrong input");
+        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+    }
+
+
+    private String getTime() {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("ddMMyy HH:mm:ss");
+        LocalDateTime localTime = LocalDateTime.now();
+        return dtf.format(localTime);
+
+    }
+
+    private void getLog() {
+
+        for (String log : log) {
             System.out.println(log);
         }
     }
 
-    private String getStatus(String login){
-     if(login!=null) {
-         if (getUser(login).getToken() != null) {
-             return "login";
-         }
-         return "logout";
-     } else
-         return null;
+    private String getStatus(String login) {
+        if (login != null) {
+            if (getUser(login).getToken() != null) {
+                return "login";
+            }
+            return "logout";
+        } else
+            return null;
     }
 
     private boolean findLogin(String login) {
