@@ -1,5 +1,6 @@
 package main;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.mindrot.jbcrypt.BCrypt;
 import org.springframework.http.MediaType;
@@ -66,6 +67,7 @@ public class UserController {
                 String token = generateToken();
                 res.put("token", token);
                 loggedUser.setToken(token);
+                writeLog("login", obj.getString("login"));
                 return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(res.toString());
             } else {
                 res.put("error", "Invalid login or password");
@@ -129,9 +131,10 @@ public class UserController {
 
         String login = obj.getString("login");
         User user = getUser(login);
-        if (user != null && checkToken(token)) {
+        if (user != null && user.getToken().equals(token)) {
 
             user.setToken(null);
+            writeLog("logout", user.getLogin());
             return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body("{}");
         }
         JSONObject res = new JSONObject();
@@ -188,25 +191,30 @@ public class UserController {
 
 
         if (obj.has("login")) {
-            if (temp.getLogin().equals(obj.getString("login")) && temp.getToken().equals(token)) {
-                res.put("type", getStatus(temp.getLogin()));
-                res.put("login", temp.getLogin());
-                res.put("datetime", getTime());
-                log.add(res.toString());
-                getLog();
-                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            JSONArray arr = new JSONArray();
+            for (String record : log) {
+                if (temp.getLogin().equals(obj.getString("login")) && temp.getToken().equals(token)) {
 
-
-            } else {
-                res.put("error", "Wrong login or token");
-                return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+                    JSONObject temps = new JSONObject(record);
+                    arr.put(temps);
+                }
             }
-        } else
-            res.put("error", "Wrong input");
-        return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(arr.toString());
+
+
+        } else {
+            res.put("error", "Wrong login or token");
+            return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
 
     }
-
+    private void writeLog(String type, String login) {
+        JSONObject obj = new JSONObject();
+        obj.put("type",type);
+        obj.put("login",login);
+        obj.put("datetime",getTime());
+        log.add(obj.toString());
+    }
 
     @RequestMapping(method = RequestMethod.POST, value = "/message/new")
     public ResponseEntity<String> sendMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
@@ -256,6 +264,7 @@ public class UserController {
         if (obj.has("login")) {
             if (temp.getToken().equals(token) && findLogin(obj.getString("login"))) {
                 res.put("messages", this.messages);
+
                 return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
             } else {
@@ -271,6 +280,62 @@ public class UserController {
     }
 
 
+    @RequestMapping(method = RequestMethod.DELETE, value = "/delete/{login}")
+    public ResponseEntity<String> deleteUser(@RequestHeader(name = "Authorization") String token, @PathVariable String login) {
+
+        JSONObject res = new JSONObject();
+        User temp = getUser(login);
+
+        if (temp == null) {
+            res.put("error", "Wrong user or token is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+
+        if (findLogin(login)) {
+            if (temp.getToken().equals(token)) {
+                list.remove(temp);
+                log.remove(temp.getLogin());
+                messages.remove(temp.getLogin());
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+            }
+
+        }
+        res.put("error", "Wrong token or login");
+        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+    }
+
+    @RequestMapping(method = RequestMethod.PATCH, value = "/update/{login}")
+    public ResponseEntity<String> updateUser(@RequestBody String data, @RequestHeader(name = "Authorization") String token, @PathVariable String login) {
+        JSONObject obj = new JSONObject(data);
+        JSONObject res = new JSONObject();
+        User temp = getUser(login);
+
+        if (temp == null) {
+            res.put("error", "Wrong user or token is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+
+        if (temp.getToken().equals(token) && findLogin(login)) {
+
+            if (obj.has("lname") && !obj.has("fname")) {
+                temp.setLname(obj.getString("lname"));
+
+            } else if (obj.has("fname") && !obj.has("lname")) {
+                temp.setFname(obj.getString("fname"));
+
+            } else if (obj.has("lname") && obj.has("fname")) {
+                temp.setLname(obj.getString("lname"));
+                temp.setFname(obj.getString("fname"));
+            }
+
+            return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+        res.put("error", "Wrong token");
+        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+    }
+
+
     private String getTime() {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("ddMMyy HH:mm:ss");
         LocalDateTime localTime = LocalDateTime.now();
@@ -278,22 +343,6 @@ public class UserController {
 
     }
 
-    private void getLog() {
-
-        for (String log : log) {
-            System.out.println(log);
-        }
-    }
-
-    private String getStatus(String login) {
-        if (login != null) {
-            if (getUser(login).getToken() != null) {
-                return "login";
-            }
-            return "logout";
-        } else
-            return null;
-    }
 
     private boolean findLogin(String login) {
         for (User user : list) {
