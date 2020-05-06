@@ -289,6 +289,8 @@ public class UserController {
                             arr.put(temps);
                         }
                     }
+                    res.put("error", "Invalid user");
+                    return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
                 }
 
             }
