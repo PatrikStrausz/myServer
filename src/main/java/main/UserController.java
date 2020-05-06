@@ -262,7 +262,7 @@ public class UserController {
 
 
     @RequestMapping(value = "/message")
-    public ResponseEntity<String> getMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
+    public ResponseEntity<String> getMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token, @RequestParam(required = false) String from) {
         JSONObject obj = new JSONObject(data);
         JSONObject res = new JSONObject();
         User temp = getUser(obj.getString("login"));
@@ -273,17 +273,26 @@ public class UserController {
         }
 
         if (obj.has("login")) {
-            if (temp.getToken().equals(token) && findLogin(obj.getString("login"))) {
-                res.put("messages", this.messages);
+            JSONArray arr = new JSONArray();
+            for (String messages : messages) {
+                if (temp.getToken().equals(token) && findLogin(obj.getString("login"))) {
+                    if (from == null) {
+                        JSONObject temps = new JSONObject(messages);
+                        arr.put(temps);
 
-                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
-            } else {
-                res.put("error", "Wrong token or login");
-                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+                    } else if (findLogin(from)) {
+
+
+                        JSONObject temps = new JSONObject(messages);
+                        if (temps.getString("from").equals(from)) {
+                            arr.put(temps);
+                        }
+                    }
+                }
+
             }
-
-
+            return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(arr.toString());
         } else
             res.put("error", "Wrong input");
         return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
