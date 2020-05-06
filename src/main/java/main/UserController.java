@@ -177,42 +177,53 @@ public class UserController {
     }
 
     @RequestMapping(value = "/log")
-    public ResponseEntity<String> log(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
+    public ResponseEntity<String> log(@RequestBody String data, @RequestHeader(name = "Authorization") String token, @RequestParam(required = false) String type) {
 
         JSONObject obj = new JSONObject(data);
         JSONObject res = new JSONObject();
         User temp = getUser(obj.getString("login"));
-
 
         if (temp == null) {
             res.put("error", "Incorrect login");
             return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
-
         if (obj.has("login")) {
             JSONArray arr = new JSONArray();
             for (String record : log) {
                 if (temp.getLogin().equals(obj.getString("login")) && temp.getToken().equals(token)) {
+                    if (type == null) {
+                        JSONObject temps = new JSONObject(record);
+                        arr.put(temps);
+                    } else if (type.equals("login")) {
+                        JSONObject temps = new JSONObject(record);
+                        if (temps.getString("type").equals("login")) {
+                            arr.put(temps);
+                        }
+                    } else if (type.equals("logout")) {
+                        JSONObject temps = new JSONObject(record);
+                        if (temps.getString("type").equals("logout")) {
+                            arr.put(temps);
+                        }
+                    }
 
-                    JSONObject temps = new JSONObject(record);
-                    arr.put(temps);
                 }
             }
+
             return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(arr.toString());
-
-
-        } else {
-            res.put("error", "Wrong login or token");
-            return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
+
+        res.put("error", "Wrong login or token");
+        return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
     }
+
     private void writeLog(String type, String login) {
         JSONObject obj = new JSONObject();
-        obj.put("type",type);
-        obj.put("login",login);
-        obj.put("datetime",getTime());
+        obj.put("type", type);
+        obj.put("login", login);
+        obj.put("datetime", getTime());
         log.add(obj.toString());
     }
 
