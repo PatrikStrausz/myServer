@@ -15,13 +15,14 @@ import java.util.List;
 
 @RestController
 public class UserController {
+    Database db = new Database();
 
     List<User> list = new ArrayList<>();
     List<String> log = new ArrayList<>();
     List<String> messages = new ArrayList<>();
 
     public UserController() {
-        list.add(new User("Roman", "Simko", "roman", "heslo"));
+        db.getConnection();
     }
 
     @RequestMapping("/time")
@@ -49,80 +50,72 @@ public class UserController {
     @RequestMapping(method = RequestMethod.POST, value = "/login")
     public ResponseEntity<String> login(@RequestBody String credential) {
         JSONObject obj = new JSONObject(credential);
+        JSONObject res = new JSONObject();
         if (obj.has("login") && obj.has("password")) {
-            JSONObject res = new JSONObject();
+
             if (obj.getString("password").isEmpty() || obj.getString("login").isEmpty()) {
                 res.put("error", "Password and login are mandatory fields");
                 return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
             }
-            if (findLogin(obj.getString("login")) && checkPassword(obj.getString("login"), obj.getString("password"))) {
-                User loggedUser = getUser(obj.getString("login"));
-                if (loggedUser == null) {
+            User loggedUser = db.getUser(obj.getString("login"));
 
-                    return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body("{}");
-                }
+            if (!db.findLogin(obj.getString("login")) && db.checkPassword(obj.getString("login"),
+                    obj.getString("password"))) {
+
+                db.loginUser(obj.getString("login"), obj.getString("password"));
                 res.put("fname", loggedUser.getFname());
                 res.put("lname", loggedUser.getLname());
                 res.put("login", loggedUser.getLogin());
-                String token = generateToken();
-                res.put("token", token);
-                loggedUser.setToken(token);
-                writeLog("login", obj.getString("login"));
+                res.put("token", db.getToken(loggedUser.getLogin()));
+
+
+//                writeLog("login", obj.getString("login"));
                 return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(res.toString());
             } else {
-                res.put("error", "Invalid login or password");
+                res.put("error", "Wrong login or password");
                 return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
             }
 
-        } else {
-            JSONObject res = new JSONObject();
-            res.put("error", "Invalid body request");
-            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
-
+        res.put("error", "Missing login or password");
+        return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/signup")
     public ResponseEntity<String> signup(@RequestBody String data) {
 
         JSONObject jsonObject = new JSONObject(data);
-
+        JSONObject res = new JSONObject();
         if (jsonObject.has("fname") && jsonObject.has("lname") && jsonObject.has("login")
                 && jsonObject.has("password")) {
-            if (findLogin(jsonObject.getString("login"))) {
-                JSONObject res = new JSONObject();
-                res.put("error", "user already exists");
-                return ResponseEntity.status(400).body(res.toString());
-            }
+
             String password = jsonObject.getString("password");
             if (password.isEmpty()) {
-                JSONObject res = new JSONObject();
+
                 res.put("error", "password is a mandatory field");
-                return ResponseEntity.status(400).body(res.toString());
+                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
             }
-            String hashpas = hashPassword(password);
 
-            User user = new User(jsonObject.getString("fname"), jsonObject.getString("lname"),
-                    jsonObject.getString("login"), hashpas);
-            list.add(user);
-            JSONObject res = new JSONObject();
-            res.put("fname", jsonObject.getString("fname"));
-            res.put("lname", jsonObject.getString("lname"));
-            res.put("login", jsonObject.getString("login"));
-            return ResponseEntity.status(200).body(res.toString());
-        } else {
-            JSONObject res = new JSONObject();
-            res.put("error", "invalid input");
-            return ResponseEntity.status(400).body(res.toString());
+            if (db.findLogin(jsonObject.getString("login"))) {
+                db.addUser(jsonObject.getString("fname"), jsonObject.getString("lname"),
+                        jsonObject.getString("login"), jsonObject.getString("password"));
+
+                res.put("fname", jsonObject.getString("fname"));
+                res.put("lname", jsonObject.getString("lname"));
+                res.put("login", jsonObject.getString("login"));
+
+                return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            } else {
+
+                res.put("error", "Login already exists");
+                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            }
         }
+        res.put("error", "Something is missing");
+        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
     }
 
-    private String hashPassword(String password) {
-        return BCrypt.hashpw(password, BCrypt.gensalt(12));
-
-
-    }
 
 
     @RequestMapping(method = RequestMethod.POST, value = "/logout")
@@ -130,11 +123,12 @@ public class UserController {
         JSONObject obj = new JSONObject(data);
 
         String login = obj.getString("login");
-        User user = getUser(login);
-        if (user != null && user.getToken().equals(token)) {
+        User user = db.getUser(login);
+        if (user != null && db.checkToken(token)) {
 
             user.setToken(null);
-            writeLog("logout", user.getLogin());
+            db.logoutUser(obj.getString("login"), token);
+//            writeLog("logout", user.getLogin());
             return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body("{}");
         }
         JSONObject res = new JSONObject();
@@ -148,7 +142,7 @@ public class UserController {
 
         JSONObject obj = new JSONObject(data);
         JSONObject res = new JSONObject();
-        User temp = getUser(obj.getString("login"));
+        User temp = db.getUser(obj.getString("login"));
 
 
         if (temp == null) {
@@ -156,13 +150,17 @@ public class UserController {
             return ResponseEntity.status(401).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
-        if (obj.has("login") && obj.has("oldpassword") && obj.has("newpassword")) {
+
+        if (obj.has("login") && obj.has("newPassword") && obj.has("oldPassword")) {
 
 
-            System.out.println(obj.getString("oldpassword"));
-            if (temp.getLogin().equals(obj.getString("login")) && BCrypt.checkpw(obj.getString("oldpassword"), temp.getPassword())
-                    && temp.getToken().equals(token)) {
-                temp.setPassword(obj.getString("newpassword"));
+            if (!db.findLogin(temp.getLogin()) && BCrypt.checkpw(obj.getString("oldPassword"), temp.getPassword())
+                    && db.checkToken(token)) {
+
+                db.changePassword(temp.getPassword(), obj.getString("newPassword"),
+                        obj.getString("login"), token);
+
+                temp.setPassword(obj.getString("newPassword"));
                 return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
             } else {
@@ -303,24 +301,20 @@ public class UserController {
 
 
     @RequestMapping(method = RequestMethod.DELETE, value = "/delete/{login}")
-    public ResponseEntity<String> deleteUser(@RequestHeader(name = "Authorization") String token, @PathVariable String login) {
+    public ResponseEntity<String> deleteUser(@RequestHeader(name = "Authorization") String token, @PathVariable(required = false) String login) {
 
         JSONObject res = new JSONObject();
-        User temp = getUser(login);
+        User temp = db.getUser(login);
 
         if (temp == null) {
             res.put("error", "Wrong user or token is missing");
             return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
-        if (findLogin(login)) {
-            if (temp.getToken().equals(token)) {
-                list.remove(temp);
-                log.remove(temp.getLogin());
-                messages.remove(temp.getLogin());
-                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        if (db.checkToken(token)) {
+            db.deleteUser(temp.getLogin(), token);
+            return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
-            }
 
         }
         res.put("error", "Wrong token or login");
@@ -328,27 +322,31 @@ public class UserController {
     }
 
     @RequestMapping(method = RequestMethod.PATCH, value = "/update/{login}")
-    public ResponseEntity<String> updateUser(@RequestBody String data, @RequestHeader(name = "Authorization") String token, @PathVariable String login) {
+    public ResponseEntity<String> updateUser(@RequestBody String data, @RequestHeader(name = "Authorization") String token, @PathVariable(required = false) String login) {
         JSONObject obj = new JSONObject(data);
         JSONObject res = new JSONObject();
-        User temp = getUser(login);
+        User temp = db.getUser(login);
 
         if (temp == null) {
             res.put("error", "Wrong user or token is missing");
             return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
-        if (temp.getToken().equals(token) && findLogin(login)) {
+        if (db.checkToken(token) && !db.findLogin(login)) {
 
             if (obj.has("lname") && !obj.has("fname")) {
+                db.updateLname(obj.getString("lname"), token, login);
                 temp.setLname(obj.getString("lname"));
 
             } else if (obj.has("fname") && !obj.has("lname")) {
+                db.updateFname(obj.getString("fname"), token, login);
                 temp.setFname(obj.getString("fname"));
 
             } else if (obj.has("lname") && obj.has("fname")) {
+                db.updateUserBoth(obj.getString("lname"), obj.getString("fname"), token, login);
                 temp.setLname(obj.getString("lname"));
                 temp.setFname(obj.getString("fname"));
+
             }
 
             return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
