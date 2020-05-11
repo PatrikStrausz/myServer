@@ -2,15 +2,20 @@ package main;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.MongoClient;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.json.JSONObject;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Database {
 
@@ -20,12 +25,9 @@ public class Database {
 
 
     public boolean addUser(String fname, String lname, String login, String password) {
-
-
         MongoClient mongo = getConnection();
         MongoDatabase db = mongo.getDatabase("Bank");
         MongoCollection<Document> collection = db.getCollection("User");
-
 
         if (findLogin(login)) {
             Document users = new Document("fname", fname)
@@ -38,7 +40,6 @@ public class Database {
         } else {
             return false;
         }
-
 
     }
 
@@ -55,17 +56,27 @@ public class Database {
 
         Bson bsonFilter = Filters.eq("login", login);
         Document myDoc = collection.find(bsonFilter).first();
-
-        assert myDoc != null;
-        String hashed = myDoc.getString("password");
         User temp = getUser(login);
 
-        if (!findLogin(login) && BCrypt.checkpw(password, hashed) && temp.getLogin().equals(login)) {
-            BasicDBObject token = new BasicDBObject().append("token", generateToken());
-            temp.setToken(token.getString("token"));
-            collection.updateOne(loginQuery, new BasicDBObject("$set", token));
-            mongo.close();
-            return true;
+        if (myDoc != null) {
+
+            String hashed = myDoc.getString("password");
+
+
+            if (!findLogin(login) && BCrypt.checkpw(password, hashed)) {
+                if (BCrypt.checkpw(password, temp.getPassword())) {
+                    BasicDBObject token = new BasicDBObject().append("token", generateToken());
+                    temp.setToken(token.getString("token"));
+                    collection.updateOne(loginQuery, new BasicDBObject("$set", token));
+
+                }else {
+                    mongo.close();
+                    return false;
+                }
+                mongo.close();
+                return true;
+            }
+
         }
         mongo.close();
         return false;
@@ -81,14 +92,25 @@ public class Database {
         loginQuery.put("login", login);
         loginQuery.put("token", token);
 
+        BasicDBObject checkQuery = new BasicDBObject();
+        checkQuery.append("login", login);
+        checkQuery.append("token", token);
+
+        FindIterable<Document> doc = collection.find(checkQuery);
+
+
         User temp = getUser(login);
-        if (!findLogin(login) && checkToken(token) && temp.getLogin().equals(login)) {
-            collection.updateOne(loginQuery, new BasicDBObject("$unset", new BasicDBObject("token", token)));
-            mongo.close();
-            return true;
-        }
+        if (!findLogin(login) && checkToken(token))
+            if (temp.getLogin().equals(login) && doc.iterator().hasNext()) {
+                collection.updateOne(loginQuery, new BasicDBObject("$unset", new BasicDBObject("token", token)));
+                temp.setToken(token);
+                mongo.close();
+            } else {
+                mongo.close();
+                return false;
+            }
         mongo.close();
-        return false;
+        return true;
 
     }
 
@@ -98,23 +120,25 @@ public class Database {
         MongoDatabase db = mongo.getDatabase("Bank");
         MongoCollection<Document> collection = db.getCollection("User");
 
-
         BasicDBObject loginQuery = new BasicDBObject();
         loginQuery.put("login", login);
         loginQuery.put("token", token);
-        MongoCursor<Document> cursor = collection.find(loginQuery).iterator();
+        FindIterable<Document> cursor = collection.find(loginQuery);
 
-        User temp = getUser(login);
 
-        if (cursor.hasNext() && temp.getLogin().equals(login)) {
-            collection.deleteOne(loginQuery);
+        if (!findLogin(login) && checkToken(token)) {
+            if (cursor.iterator().hasNext()) {
+                collection.deleteOne(loginQuery);
+
+            } else {
+                mongo.close();
+                return false;
+            }
             mongo.close();
             return true;
         }
         mongo.close();
         return false;
-
-
     }
 
     public boolean changePassword(String oldPassword, String newPassword, String login, String token) {
@@ -127,11 +151,20 @@ public class Database {
         loginQuery.append("password", oldPassword);
         loginQuery.append("token", token);
 
+        FindIterable<Document> doc = collection.find(loginQuery);
+
+        System.out.println(doc.iterator().hasNext());
         User temp = getUser(login);
 
-        if (checkToken(token) && !findLogin(login) && temp.getLogin().equals(login)) {
+        if (checkToken(token) && !findLogin(login)) {
+            if (temp.getLogin().equals(login) && doc.iterator().hasNext()) {
 
-            collection.updateOne(loginQuery, new BasicDBObject("$set", new BasicDBObject("password", hashPassword(newPassword))));
+                collection.updateOne(loginQuery, new BasicDBObject("$set", new BasicDBObject("password", hashPassword(newPassword))));
+
+            } else {
+                mongo.close();
+                return false;
+            }
             mongo.close();
             return true;
         }
@@ -176,10 +209,7 @@ public class Database {
         loginQuery.append("lname", temp.getLname());
         loginQuery.append("token", token);
 
-        System.out.println(temp.getLogin());
-
         if (checkToken(token) && !findLogin(login) && temp.getLogin().equals(login)) {
-
 
             collection.updateOne(loginQuery, new BasicDBObject("$set", new BasicDBObject("lname", lname)));
             mongo.close();
@@ -211,6 +241,149 @@ public class Database {
         }
         mongo.close();
         return false;
+    }
+
+    public boolean log(String login, String type) {
+        MongoClient mongo = getConnection();
+        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoCollection<Document> collection = db.getCollection("log");
+
+        BasicDBObject loginQuery = new BasicDBObject();
+        loginQuery.append("login", login);
+
+
+        User temp = getUser(login);
+
+        if (!findLogin(login) && temp.getLogin().equals(login)) {
+
+            collection.insertOne(new Document().append("type", type).append("login", login)
+                    .append("datetime", getTime()));
+            return true;
+        }
+        return false;
+    }
+
+    public List<String> getLog(String login, String token) {
+        MongoClient mongo = getConnection();
+        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoCollection<Document> collection = db.getCollection("log");
+
+        MongoCollection<Document> collections = db.getCollection("User");
+
+
+        BasicDBObject loginQuery = new BasicDBObject();
+        loginQuery.append("type", login);
+
+        Bson bsonFilter = Filters.eq("login", login);
+        Document myDoc = collection.find(bsonFilter).first();
+        FindIterable<Document> ss = collection.find(bsonFilter);
+
+        BasicDBObject checkQuery = new BasicDBObject();
+        checkQuery.append("login", login);
+        checkQuery.append("token", token);
+
+        FindIterable<Document> doc = collections.find(checkQuery);
+
+        User temp = getUser(login);
+
+        List<String> tem = new ArrayList<>();
+        JSONObject obj = new JSONObject();
+
+        if (!findLogin(login) && checkToken(token) && temp.getLogin().equals(login) && myDoc != null) {
+            if(doc.iterator().hasNext()) {
+
+                for (Document p : ss) {
+                    obj.put("type", p.getString("type"));
+                    obj.put("login", p.getString("login"));
+                    obj.put("datetime", p.getString("datetime"));
+                    tem.add(obj.toString());
+                }
+            }else {
+                return null;
+            }
+            return tem;
+        }
+
+return null;
+
+
+    }
+
+    public boolean newMessage(String from, String to, String token, String message) {
+        MongoClient mongo = getConnection();
+        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoCollection<Document> collection = db.getCollection("message");
+
+        MongoCollection<Document> collections = db.getCollection("User");
+
+
+        BasicDBObject loginQuery = new BasicDBObject();
+        loginQuery.append("login", from);
+        loginQuery.append("token", token);
+
+        FindIterable<Document> doc = collections.find(loginQuery);
+
+
+        if (!findLogin(from) && !findLogin(to) && checkToken(token)) {
+            if (doc.iterator().hasNext()) {
+
+                collection.insertOne(new Document().append("from", from).append("to", to).append("message", message)
+                        .append("time", getTime()));
+            } else {
+                return false;
+            }
+        }
+        return true;
+
+
+    }
+
+    public List<String> getMessage(String login, String token) {
+        MongoClient mongo = getConnection();
+        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoCollection<Document> collection = db.getCollection("message");
+
+        MongoCollection<Document> collections = db.getCollection("User");
+
+
+        Bson bsonFilter = Filters.eq("from", login);
+        FindIterable<Document> ss = collection.find(bsonFilter);
+
+
+        BasicDBObject checkQuery = new BasicDBObject();
+        checkQuery.append("login", login);
+        checkQuery.append("token", token);
+
+        FindIterable<Document> doc = collections.find(checkQuery);
+
+
+        List<String> tem = new ArrayList<>();
+        JSONObject obj = new JSONObject();
+
+        System.out.println(doc.iterator().hasNext());
+
+        if (!findLogin(login) && checkToken(token)) {
+            if (doc.iterator().hasNext()) {
+                for (Document p : ss) {
+                    obj.put("from", p.getString("from"));
+                    obj.put("to", p.getString("to"));
+                    obj.put("message", p.getString("message"));
+                    obj.put("time", p.getString("time"));
+                    tem.add(obj.toString());
+                }
+            }
+        }
+
+        return tem;
+
+    }
+
+
+    public String getTime() {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("ddMMyy HH:mm:ss");
+        LocalDateTime localTime = LocalDateTime.now();
+        return dtf.format(localTime);
+
     }
 
 
@@ -247,25 +420,6 @@ public class Database {
         if (count == 0) {
             mongo.close();
             return true;
-        }
-        mongo.close();
-        return false;
-    }
-
-    public boolean checkPassword(String login, String password) {
-        MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
-        MongoCollection<Document> collection = db.getCollection("User");
-
-        BasicDBObject loginQuery = new BasicDBObject();
-        loginQuery.put("login", login);
-        loginQuery.put("password", password);
-        User temp = getUser(login);
-
-
-        if (!findLogin(login) ) {
-            mongo.close();
-            return BCrypt.checkpw(password, temp.getPassword());
         }
         mongo.close();
         return false;
