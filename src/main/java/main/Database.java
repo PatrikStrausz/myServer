@@ -9,8 +9,10 @@ import com.mongodb.client.model.Filters;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.json.JSONObject;
+import org.json.simple.parser.JSONParser;
 import org.mindrot.jbcrypt.BCrypt;
 
+import java.io.FileReader;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,14 +21,36 @@ import java.util.List;
 
 public class Database {
 
+    private String url;
+    private String dbName;
+    private int port;
+
+    public void getConfig(){
+        JSONParser jsonParser = new JSONParser();
+        try
+        {
+            Object obj = jsonParser.parse(new FileReader("src\\main\\java\\main\\config.json"));
+            org.json.simple.JSONObject employeeList = (org.json.simple.JSONObject) obj;
+
+             url = (String) employeeList.get("url");
+             dbName = (String) employeeList.get("dbname");
+             String temp = String.valueOf( employeeList.get("port"));
+            port = Integer.parseInt(temp);
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
     public MongoClient getConnection() {
-        return new MongoClient("localhost", 27017);
+        getConfig();
+        return new MongoClient(url, port);
     }
 
 
     public boolean addUser(String fname, String lname, String login, String password) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         if (findLogin(login)) {
@@ -47,7 +71,7 @@ public class Database {
     public boolean loginUser(String login, String password) {
 
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
 
@@ -85,7 +109,7 @@ public class Database {
 
     public boolean logoutUser(String login, String token) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -117,7 +141,7 @@ public class Database {
     public boolean deleteUser(String login, String token) {
 
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -143,7 +167,7 @@ public class Database {
 
     public boolean changePassword(String oldPassword, String newPassword, String login, String token) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -176,7 +200,7 @@ public class Database {
 
     public boolean updateUserBoth(String lname, String fname, String token, String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
 
@@ -200,7 +224,7 @@ public class Database {
 
     public boolean updateLname(String lname, String token, String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
 
@@ -221,7 +245,7 @@ public class Database {
 
     public boolean updateFname(String fname, String token, String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
 
@@ -245,7 +269,7 @@ public class Database {
 
     public boolean log(String login, String type) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("log");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -265,11 +289,10 @@ public class Database {
 
     public List<String> getLog(String login, String token) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("log");
 
         MongoCollection<Document> collections = db.getCollection("User");
-
 
         BasicDBObject loginQuery = new BasicDBObject();
         loginQuery.append("type", login);
@@ -311,7 +334,7 @@ return null;
 
     public boolean newMessage(String from, String to, String token, String message) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("message");
 
         MongoCollection<Document> collections = db.getCollection("User");
@@ -340,7 +363,7 @@ return null;
 
     public List<String> getMessage(String login, String token) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("message");
 
         MongoCollection<Document> collections = db.getCollection("User");
@@ -389,7 +412,7 @@ return null;
 
     public User getUser(String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         Bson bsonFilter = Filters.eq("login", login);
@@ -410,7 +433,7 @@ return null;
 
     public boolean findLogin(String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -427,7 +450,7 @@ return null;
 
     public boolean checkToken(String token) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         BasicDBObject loginQuery = new BasicDBObject();
@@ -445,7 +468,7 @@ return null;
 
     public String getToken(String login) {
         MongoClient mongo = getConnection();
-        MongoDatabase db = mongo.getDatabase("Bank");
+        MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
         Bson bsonFilter = Filters.eq("login", login);
