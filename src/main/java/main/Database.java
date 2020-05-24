@@ -361,33 +361,36 @@ return null;
 
     }
 
-    public List<String> getMessage(String login, String token) {
+    public List<String> getMessage(String login, String token, String from) {
         MongoClient mongo = getConnection();
         MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("message");
 
         MongoCollection<Document> collections = db.getCollection("User");
 
-
-        Bson bsonFilter = Filters.eq("from", login);
-        FindIterable<Document> ss = collection.find(bsonFilter);
-
+        BasicDBObject checkMessage = new BasicDBObject();
+        System.out.println(from);
+        if(from == null){
+            checkMessage.append("to", login);
+        } else {
+            checkMessage.append("to", login);
+            checkMessage.append("from", from);
+        }
 
         BasicDBObject checkQuery = new BasicDBObject();
         checkQuery.append("login", login);
         checkQuery.append("token", token);
 
         FindIterable<Document> doc = collections.find(checkQuery);
+        FindIterable<Document> mess = collection.find(checkMessage);
 
 
         List<String> tem = new ArrayList<>();
         JSONObject obj = new JSONObject();
 
-        System.out.println(doc.iterator().hasNext());
-
         if (!findLogin(login) && checkToken(token)) {
-            if (doc.iterator().hasNext()) {
-                for (Document p : ss) {
+            if (doc.iterator().hasNext() && mess.iterator().hasNext()) {
+                for (Document p : mess) {
                     obj.put("from", p.getString("from"));
                     obj.put("to", p.getString("to"));
                     obj.put("message", p.getString("message"));
@@ -396,6 +399,7 @@ return null;
                 }
             }
         }
+
 
         return tem;
 

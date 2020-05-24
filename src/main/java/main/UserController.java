@@ -224,7 +224,7 @@ public class UserController {
                         }
                     } else if (type.equals("passwordChange")) {
                         JSONObject temps = new JSONObject(record);
-                        if (temps.getString("type").equals("logout")) {
+                        if (temps.getString("type").equals("passwordChange")) {
                             arr.put(temps);
                         }
                     }
@@ -285,33 +285,31 @@ public class UserController {
             return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
 
+
         if (obj.has("login")) {
             JSONArray arr = new JSONArray();
-            for (String messages : db.getMessage(obj.getString("login"), token)) {
+            for (String messages : db.getMessage(obj.getString("login"), token,from)) {
 
-
-                if (from == null) {
+                if (from == null ) {
                     JSONObject temps = new JSONObject(messages);
                     arr.put(temps);
 
                 } else if (!db.findLogin(from)){
                     JSONObject temps = new JSONObject(messages);
+                    System.out.println(temps.getString("from"));
                     if(temps.getString("from").equals(from)) {
 
                         arr.put(temps);
                     }
+
                 }
-
-//                    return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
-
-
             }
 
             return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(arr.toString());
-        } else
-            res.put("error", "Wrong input");
-        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
-
+        } else {
+            res.put("error", "Login is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
     }
 
 }
