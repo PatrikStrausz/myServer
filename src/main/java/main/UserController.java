@@ -138,7 +138,7 @@ public class UserController {
 
         if (obj.has("login") && obj.has("newPassword") && obj.has("oldPassword")) {
 
-            if ( db.changePassword(temp.getPassword(), obj.getString("newPassword"),
+            if ( db.changePassword(obj.getString("oldPassword"), obj.getString("newPassword"),
                     obj.getString("login"), token) && BCrypt.checkpw(obj.getString("oldPassword"),temp.getPassword())) {
 
                 temp.setPassword(obj.getString("newPassword"));
@@ -253,25 +253,37 @@ public class UserController {
         }
 
         if (obj.has("from") && obj.has("to") && obj.has("message")) {
+            if (!db.findLogin(obj.getString("to"))) {
+                if (db.checkToken(token)) {
+                    if (db.newMessage(obj.getString("from"), obj.getString("to"), token, obj.getString("message"))) {
+                        res.put("from", obj.getString("from"));
+                        res.put("to", obj.getString("to"));
+                        res.put("message", obj.getString("message"));
+                        res.put("time", db.getTime());
+                        return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
-            if (db.newMessage(obj.getString("from"),obj.getString("to"), token, obj.getString("message"))) {
-                res.put("from", obj.getString("from"));
-                res.put("to", obj.getString("to"));
-                res.put("message", obj.getString("message"));
-                res.put("time", db.getTime());
-                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+                    } else {
+                        res.put("error", "Wrong token or user");
+                        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+                    }
+                }else{
+                    res.put("error", "Wrong token");
+                    return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+                }
+
+                } else {
+                    res.put("error", "Wrong recipient");
+                    return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+                }
 
 
-            } else {
-                res.put("error", "Wrong token or user");
-                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
-            }
+            } else
+                res.put("error", "Wrong input");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
 
-        } else
-            res.put("error", "Wrong input");
-        return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
 
-    }
 
 
     @RequestMapping(value = "/message")

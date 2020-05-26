@@ -170,19 +170,27 @@ public class Database {
         MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
+        Bson bsonFilter = Filters.eq("login", login);
+        Document myDoc = collection.find(bsonFilter).first();
+
+        assert myDoc != null;
+        String hashed = myDoc.getString("password");
+
+
         BasicDBObject loginQuery = new BasicDBObject();
         loginQuery.append("login", login);
-        loginQuery.append("password", oldPassword);
+        loginQuery.append("password", hashed);
         loginQuery.append("token", token);
+        System.out.println(hashed);
 
         FindIterable<Document> doc = collection.find(loginQuery);
 
-        System.out.println(doc.iterator().hasNext());
+
         User temp = getUser(login);
 
-        if (checkToken(token) && !findLogin(login)) {
-            if (temp.getLogin().equals(login) && doc.iterator().hasNext()) {
 
+        if (checkToken(token) && !findLogin(login) && BCrypt.checkpw(oldPassword, myDoc.getString("password"))) {
+            if ( doc.iterator().hasNext()) {
                 collection.updateOne(loginQuery, new BasicDBObject("$set", new BasicDBObject("password", hashPassword(newPassword))));
 
             } else {
