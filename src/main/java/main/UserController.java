@@ -12,7 +12,6 @@ public class UserController {
     Database db = new Database();
 
     public UserController() {
-
         db.getConnection();
     }
 
@@ -322,6 +321,34 @@ public class UserController {
             res.put("error", "Login is missing");
             return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
         }
+    }
+
+    @RequestMapping(method = RequestMethod.DELETE ,value = "/deleteMessage")
+    public ResponseEntity<String> deleteMessage(@RequestBody String data, @RequestHeader(name = "Authorization") String token) {
+        JSONObject obj = new JSONObject(data);
+        JSONObject res = new JSONObject();
+        User temp = db.getUser(obj.getString("login"));
+
+        if (temp == null) {
+            res.put("error", "Wrong user or token is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+        }
+
+        if(obj.has("login") &&obj.has("from") && obj.has("time")){
+            if(db.deleteMessage(obj.getString("login"), token, obj.getString("from"), obj.getString("time"))){
+                return ResponseEntity.status(201).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+            }else{
+                res.put("error", "Wrong input");
+                return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+            }
+
+        }else{
+            res.put("error", "Login or time or from is missing");
+            return ResponseEntity.status(400).contentType(MediaType.APPLICATION_JSON).body(res.toString());
+
+        }
+
     }
 
 }

@@ -74,7 +74,6 @@ public class Database {
         MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
 
-
         BasicDBObject loginQuery = new BasicDBObject();
         loginQuery.put("login", login);
 
@@ -143,17 +142,25 @@ public class Database {
         MongoClient mongo = getConnection();
         MongoDatabase db = mongo.getDatabase(dbName);
         MongoCollection<Document> collection = db.getCollection("User");
+        MongoCollection<Document> collectionLog = db.getCollection("log");
+        MongoCollection<Document> collectionMessage = db.getCollection("message");
 
         BasicDBObject loginQuery = new BasicDBObject();
         loginQuery.put("login", login);
         loginQuery.put("token", token);
         FindIterable<Document> cursor = collection.find(loginQuery);
 
+        BasicDBObject deleteLog = new BasicDBObject().append("login", login);
+        BasicDBObject deleteMessageFrom = new BasicDBObject().append("from", login);
+        BasicDBObject deleteMessageTo = new BasicDBObject().append("to", login);
+
 
         if (!findLogin(login) && checkToken(token)) {
             if (cursor.iterator().hasNext()) {
                 collection.deleteOne(loginQuery);
-
+                collectionLog.deleteMany(deleteLog);
+                collectionMessage.deleteMany(deleteMessageFrom);
+                collectionMessage.deleteMany(deleteMessageTo);
             } else {
                 mongo.close();
                 return false;
@@ -184,9 +191,6 @@ public class Database {
         System.out.println(hashed);
 
         FindIterable<Document> doc = collection.find(loginQuery);
-
-
-        User temp = getUser(login);
 
 
         if (checkToken(token) && !findLogin(login) && BCrypt.checkpw(oldPassword, myDoc.getString("password"))) {
@@ -290,8 +294,10 @@ public class Database {
 
             collection.insertOne(new Document().append("type", type).append("login", login)
                     .append("datetime", getTime()));
+            mongo.close();
             return true;
         }
+        mongo.close();
         return false;
     }
 
@@ -328,12 +334,16 @@ public class Database {
                     obj.put("login", p.getString("login"));
                     obj.put("datetime", p.getString("datetime"));
                     tem.add(obj.toString());
+
                 }
             }else {
+                mongo.close();
                 return null;
             }
+            mongo.close();
             return tem;
         }
+        mongo.close();
 
 return null;
 
@@ -360,10 +370,14 @@ return null;
 
                 collection.insertOne(new Document().append("from", from).append("to", to).append("message", message)
                         .append("time", getTime()));
+
             } else {
+                mongo.close();
                 return false;
             }
+
         }
+        mongo.close();
         return true;
 
 
@@ -372,12 +386,13 @@ return null;
     public List<String> getMessage(String login, String token, String from) {
         MongoClient mongo = getConnection();
         MongoDatabase db = mongo.getDatabase(dbName);
-        MongoCollection<Document> collection = db.getCollection("message");
 
+        MongoCollection<Document> collection = db.getCollection("message");
+        
         MongoCollection<Document> collections = db.getCollection("User");
 
         BasicDBObject checkMessage = new BasicDBObject();
-        System.out.println(from);
+
         if(from == null){
             checkMessage.append("to", login);
         } else {
@@ -404,12 +419,50 @@ return null;
                     obj.put("message", p.getString("message"));
                     obj.put("time", p.getString("time"));
                     tem.add(obj.toString());
+
                 }
+
             }
+
         }
+        mongo.close();
 
 
         return tem;
+
+    }
+
+    public boolean deleteMessage(String login, String token, String from, String time){
+        MongoClient mongo = getConnection();
+        MongoDatabase db = mongo.getDatabase(dbName);
+        MongoCollection<Document> collection = db.getCollection("message");
+
+        MongoCollection<Document> collections = db.getCollection("User");
+
+        BasicDBObject checkQuery = new BasicDBObject();
+        checkQuery.append("login", login);
+        checkQuery.append("token", token);
+
+        BasicDBObject checkMessage = new BasicDBObject();
+        checkMessage.append("from",from);
+        checkMessage.append("time", time);
+
+
+
+        FindIterable<Document> doc = collections.find(checkQuery);
+        FindIterable<Document> mess = collection.find(checkMessage);
+
+        if(!findLogin(login) && !findLogin(from) && checkToken(token)){
+            if(doc.iterator().hasNext()){
+                if(mess.iterator().hasNext()){
+                    collection.deleteOne(checkMessage);
+                }
+            }
+        }
+        else{
+            return false;
+        }
+        return true;
 
     }
 
